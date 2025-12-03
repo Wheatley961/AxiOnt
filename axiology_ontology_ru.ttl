@@ -28,6 +28,8 @@ def get_entities(g):
     object_props = set()
     datatype_props = set()
     individuals = set()
+
+    # Поиск сущностей по типам
     for s, p, o in g:
         if o == OWL.Class:
             classes.add(s)
@@ -40,18 +42,21 @@ def get_entities(g):
     return classes, object_props, datatype_props, individuals
 
 
+def node_color(node, classes, obj_props, dt_props, individuals):
+    if node in classes:
+        return "#1f77b4"  # синий - классы
+    if node in obj_props or node in dt_props:
+        return "#ff7f0e"  # оранжевый - свойства
+    if node in individuals:
+        return "#2ca02c"  # зелёный - индивиды
+    return "#7f7f7f"      # серый - остальные
+
+
 def draw_graph(g, filter_type=None, filter_value=None, graph_mode="all"):
-    net = Network(height="700px", width="100%", directed=True)
     classes, obj_props, dt_props, individuals = get_entities(g)
 
-    def node_color(node):
-        if node in classes:
-            return "#1f77b4"  # blue - classes
-        if node in obj_props or node in dt_props:
-            return "#ff7f0e"  # orange - properties
-        if node in individuals:
-            return "#2ca02c"  # green - individuals
-        return "#7f7f7f"      # gray - others
+    net = Network(height="700px", width="100%", directed=True)
+    net.barnes_hut()
 
     for s, p, o in g:
         # Фильтрация по типу графа
@@ -62,7 +67,7 @@ def draw_graph(g, filter_type=None, filter_value=None, graph_mode="all"):
         if graph_mode == "taxonomy" and p != OWL.subClassOf:
             continue
 
-        # Фильтр по конкретному классу/свойству/индивиду
+        # Фильтрация по выбранному фильтру
         if filter_type == "class" and str(s) != filter_value and str(o) != filter_value:
             continue
         if filter_type == "property" and str(p) != filter_value:
@@ -70,12 +75,14 @@ def draw_graph(g, filter_type=None, filter_value=None, graph_mode="all"):
         if filter_type == "individual" and str(s) != filter_value and str(o) != filter_value:
             continue
 
-        net.add_node(str(s), label=str(s), color=node_color(s))
-        net.add_node(str(o), label=str(o), color=node_color(o))
+        net.add_node(str(s), label=str(s), color=node_color(s, classes, obj_props, dt_props, individuals))
+        net.add_node(str(o), label=str(o), color=node_color(o, classes, obj_props, dt_props, individuals))
         net.add_edge(str(s), str(o), label=str(p))
 
+    # Запись в временный файл
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
-    net.show(tmp.name)
+    # Вместо net.show() — используем net.write_html() с notebook=False
+    net.write_html(tmp.name, notebook=False)
     return tmp.name
 
 
@@ -105,39 +112,9 @@ def main():
     st.set_page_config(layout="wide")
     st.title("Онтология государственной ценностной политики (Указ № 809)")
 
-    # Описание проекта (примерно 300 слов)
     with st.expander("Описание проекта и назначение онтологии", expanded=True):
         st.markdown("""
-        Цель создания онтологии
-
-        Онтология предназначена для:
-
-        - формального представления положений государственной ценностной политики;
-        - семантической интеграции данных органов власти, научных центров и экспертных систем;
-        - поддержки анализа угроз традиционным ценностям;
-        - моделирования взаимосвязей между ценностями, целями, задачами, инструментами и участниками реализации политики;
-        - создания основы для автоматизированного мониторинга, прогнозирования и принятия управленческих решений.
-
-        Концептуальная основа
-
-        Онтология построена на базе:
-
-        - официально закреплённого перечня традиционных российских духовно-нравственных ценностей;
-        - положений о вызовах и угрозах ценностному суверенитету;
-        - принципов системной государственной политики в гуманитарной сфере;
-        - сценарного подхода к оценке последствий воздействия угроз;
-        - программно-целевого подхода к управлению.
-
-        Формально онтология реализована в логике OWL 2, с поддержкой:
-
-        - таксономий (классы и подклассы),
-        - реляционных связей (объектные свойства),
-        - атрибутивных характеристик (datatype properties),
-        - индивидуальных сущностей (экземпляров).
-
-        Структура онтологии (основные классы)
-
-        (Далее - как в твоём тексте...)
+        Онтология создана для формального представления государственной ценностной политики и моделирования взаимосвязей между ценностями, целями, задачами, инструментами и участниками. Концептуальная база включает официальный перечень традиционных ценностей по Приказу Президента РФ №809, принципы государственной гуманитарной политики, анализ угроз ценностному суверенитету, а также сценарный и программно-целевой подходы. Онтология реализована в парадигме OWL.
 
         """)
 
@@ -181,13 +158,15 @@ def main():
             filter_value=value,
             graph_mode=graph_mode
         )
-        st.components.v1.html(open(html_file).read(), height=750)
+        html_content = open(html_file, "r", encoding="utf-8").read()
+        st.components.v1.html(html_content, height=750)
         os.unlink(html_file)  # удаляем временный файл
 
     else:
         st.subheader("Полный граф онтологии")
         html_file = draw_graph(g, graph_mode=graph_mode)
-        st.components.v1.html(open(html_file).read(), height=750)
+        html_content = open(html_file, "r", encoding="utf-8").read()
+        st.components.v1.html(html_content, height=750)
         os.unlink(html_file)
 
     st.subheader("Экспорт графа в изображение")
@@ -197,11 +176,11 @@ def main():
     if st.button("Экспортировать граф"):
         img_path = export_graph_image(g, fmt=export_fmt, graph_mode=graph_mode)
         with open(img_path, "rb") as f:
-            btn = st.download_button(
+            st.download_button(
                 label=f"Скачать граф в формате {export_fmt.upper()}",
                 data=f,
                 file_name=img_path,
-                mime=f"image/{export_fmt}"
+                mime=f"image/" + export_fmt
             )
         os.remove(img_path)
 
