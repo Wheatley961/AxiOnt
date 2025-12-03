@@ -1,234 +1,165 @@
 import streamlit as st
-from rdflib import Graph, URIRef, RDF, RDFS, OWL, Literal
+import requests
+from rdflib import Graph, OWL, RDFS, RDF, URIRef, Literal
 from pyvis.network import Network
 import tempfile
+import os
 
-# URL онтологии
 ONTOLOGY_URL = "https://raw.githubusercontent.com/Wheatley961/AxiOnt/main/axiology_ontology_ru.ttl"
 
-st.set_page_config(page_title="Аксиологическая онтология", layout="wide")
-
-# Заголовок и описание
-st.title("Аксиологическая онтология государственной ценностной политики РФ (Указ № 809)")
-st.markdown(
-    """
-    Онтология создана для формального представления государственной ценностной политики и моделирования взаимосвязей между ценностями, целями, задачами, инструментами и участниками, а также для формирования основы автоматизированного мониторинга, прогнозирования и поддержки управленческих решений.  
-    Её концептуальная база включает официальный перечень традиционных ценностей, принципы государственной гуманитарной политики, анализ угроз ценностному суверенитету, а также сценарный и программно-целевой подходы. Формально реализована в логике OWL.
-    """
-)
-
-# Загрузка графа
-@st.cache_data(ttl=3600)
+@st.cache_resource
 def load_graph():
     g = Graph()
-    g.parse(ONTOLOGY_URL, format="turtle")
+    response = requests.get(ONTOLOGY_URL)
+    response.raise_for_status()
+    g.parse(data=response.text, format="turtle")
     return g
 
-g = load_graph()
+def get_entities_and_labels_ru(g):
+    classes = set()
+    object_props = set()
+    datatype_props = set()
+    individuals = set()
 
-# Все классы, свойства и индивиды в графе (на URI)
-all_classes = set()
-all_object_properties = set()
-all_datatype_properties = set()
-all_properties = set()
-all_individuals = set()
+    labels = {}  # URIRef -> rdfs:label str (только с языком ru)
+    uris_with_ru_label = set()
 
-for s, p, o in g:
-    # Классы
-    if (p == RDF.type and o == OWL.Class) or (p == RDF.type and o == RDFS.Class):
-        all_classes.add(s)
-    # Индивиды
-    if p == RDF.type and (o in all_classes or o == OWL.NamedIndividual or o == OWL.Thing):
-        all_individuals.add(s)
+    # Собираем все rdfs:label с языком ru
+    for s, p, o in g.triples((None, RDFS.label, None)):
+        if isinstance(o, Literal) and o.language == 'ru':
+            labels[s] = str(o)
+            uris_with_ru_label.add(s)
 
-# Более надёжный способ получить все классы, используя rdfs:subClassOf и rdf:type owl:Class
-for s in g.subjects(RDF.type, OWL.Class):
-    all_classes.add(s)
-for s in g.subjects(RDF.type, RDFS.Class):
-    all_classes.add(s)
+    # Теперь фильтруем сущности по наличию русской метки
+    for s, p, o in g.triples((None, RDF.type, None)):
+        if s not in uris_with_ru_label:
+            continue
+        if o == OWL.Class:
+            classes.add(s)
+        elif o == OWL.ObjectProperty:
+            object_props.add(s)
+        elif o == OWL.DatatypeProperty:
+            datatype_props.add(s)
+        elif (o == OWL.NamedIndividual) or (o not in [OWL.Class, OWL.ObjectProperty, OWL.DatatypeProperty]):
+            individuals.add(s)
 
-# Свойства
-for s in g.subjects(RDF.type, OWL.ObjectProperty):
-    all_object_properties.add(s)
-    all_properties.add(s)
-for s in g.subjects(RDF.type, OWL.DatatypeProperty):
-    all_datatype_properties.add(s)
-    all_properties.add(s)
+    # Иногда в онтологиях классы или индивиды могут не иметь rdf:type, но иметь метки — добавим их по умолчанию в индивиды
+    for uri in uris_with_ru_label:
+        if uri not in classes and uri not in object_props and uri not in datatype_props and uri not in individuals:
+            individuals.add(uri)
 
-# Добавим всех индивидов: все, у которых rdf:type не класс и не property
-for s, p, o in g.triples((None, RDF.type, None)):
-    if o not in all_classes and o not in all_object_properties and o not in all_datatype_properties:
-        all_individuals.add(s)
+    return classes, object_props, datatype_props, individuals, labels, uris_with_ru_label
 
-# Упрощаем: фильтры для выбора
-def uri_label(g, uri):
-    label = g.label(uri)
-    if label:
-        return str(label)
-    else:
-        return str(uri).split("#")[-1] if "#" in str(uri) else str(uri).split("/")[-1]
+def node_color(node, classes, obj_props, dt_props, individuals):
+    if node in classes:
+        return "#1f77b4"  # синий
+    if node in obj_props or node in dt_props:
+        return "#ff7f0e"  # оранжевый
+    if node in individuals:
+        return "#2ca02c"  # зелёный
+    return "#7f7f7f"
 
-# Цвета для типов узлов
-NODE_COLOR = {
-    'class': '#1f78b4',          # синий
-    'object_property': '#ff7f00',# оранжевый
-    'datatype_property': '#33a02c', # зелёный
-    'individual': '#6a3d9a'      # фиолетовый
-}
+def draw_graph(g, classes_filter, props_filter, indiv_filter, classes, obj_props, dt_props, individuals, labels, ru_uris):
+    net = Network(height="700px", width="100%", directed=True)
+    net.barnes_hut()
 
-# Добавление узла с метками и подсказкой всех свойств
-def add_node_with_label(net, g, node, node_type):
-    label = uri_label(g, node)
-    # Получаем комментарий, если есть
-    comment = g.value(node, RDFS.comment)
-    comment_text = str(comment) if comment else ""
+    def label_for(node):
+        return labels.get(node, str(node))
 
-    # Собираем все свойства узла (predicate → object), чтобы показать при наведении
-    properties = []
-    for pred, obj in g.predicate_objects(subject=node):
-        plabel = uri_label(g, pred)
-        # Подставим значение объекта
-        if isinstance(obj, Literal):
-            val = str(obj)
-        else:
-            val = uri_label(g, obj)
-        properties.append(f"{plabel}: {val}")
-
-    title = f"<b>{label}</b><br>{comment_text}<br><br>" + "<br>".join(properties)
-    net.add_node(str(node), label=label, title=title, color=NODE_COLOR[node_type])
-
-# Получить подпись (label) и комментарий по URI (с учётом языка ru)
-def get_label_comment(g, uri):
-    label = ""
-    comment = ""
-    for l in g.objects(uri, RDFS.label):
-        if hasattr(l, 'language') and l.language == 'ru':
-            label = str(l)
-            break
-    if not label:
-        for l in g.objects(uri, RDFS.label):
-            label = str(l)
-            break
-    for c in g.objects(uri, RDFS.comment):
-        if hasattr(c, 'language') and c.language == 'ru':
-            comment = str(c)
-            break
-    if not comment:
-        for c in g.objects(uri, RDFS.comment):
-            comment = str(c)
-            break
-    return label, comment
-
-def build_network_graph(g, filter_classes, filter_properties, filter_individuals):
-    net = Network(height='700px', width='100%', directed=True)
-    net.toggle_physics(True)
-
-    added_nodes = set()
-
-    def safe_add_node(node, node_type):
-        if node not in added_nodes:
-            add_node_with_label(net, g, node, node_type)
-            added_nodes.add(node)
-
-    show_all_classes = len(filter_classes) == 0
-    show_all_properties = len(filter_properties) == 0
-    show_all_individuals = len(filter_individuals) == 0
-
-    # Добавляем классы
-    for cls in all_classes:
-        if show_all_classes or cls in filter_classes:
-            safe_add_node(cls, 'class')
-
-    # Добавляем свойства
-    for prop in all_properties:
-        if show_all_properties or prop in filter_properties:
-            if prop in all_object_properties:
-                safe_add_node(prop, 'object_property')
-            else:
-                safe_add_node(prop, 'datatype_property')
-
-    # Добавляем индивидов
-    for ind in all_individuals:
-        if show_all_individuals or ind in filter_individuals:
-            safe_add_node(ind, 'individual')
-
-    # Добавляем ребра
+    # Добавляем ребра и узлы, но только если у узлов есть русская метка (ru_uris)
     for s, p, o in g:
-        if (s in added_nodes) and (o in added_nodes) and (p in added_nodes):
-            label_p, _ = get_label_comment(g, p)
-            net.add_edge(str(s), str(o), label=label_p)
+        if not (s in ru_uris and o in ru_uris):
+            continue  # Показываем только узлы с русскими метками
 
-    return net
+        # Проверяем фильтры
+        if classes_filter and not (s in classes_filter or o in classes_filter):
+            continue
+        if props_filter and p not in props_filter:
+            continue
+        if indiv_filter and not (s in indiv_filter or o in indiv_filter):
+            continue
 
+        net.add_node(str(s), label=label_for(s), color=node_color(s, classes, obj_props, dt_props, individuals))
+        net.add_node(str(o), label=label_for(o), color=node_color(o, classes, obj_props, dt_props, individuals))
+        net.add_edge(str(s), str(o), label=label_for(p))
 
-# Сортируем для удобства и отображения только русские метки
-def filter_by_ru_label(items):
-    res = []
-    for item in sorted(items, key=lambda x: uri_label(g, x).lower()):
-        label = uri_label(g, item)
-        # Отображаем только кириллицу + цифры, пробелы и знаки препинания в названии
-        if any('\u0400' <= c <= '\u04FF' for c in label):  
-            res.append(item)
-    return res
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
+    net.write_html(tmp.name, notebook=False)
+    return tmp.name
 
+def main():
+    st.set_page_config(layout="wide")
+    st.title("Аксиологическая онтология государственной ценностной политики РФ (Указ № 809)")
+    st.markdown("""
+    Онтология создана для формального представления государственной ценностной политики и моделирования взаимосвязей между ценностями, целями, задачами, инструментами и участниками, а также для формирования основы автоматизированного мониторинга, прогнозирования и поддержки управленческих решений.
 
-# Фильтры в боковой панели
-st.sidebar.header("Фильтры для визуализации")
+    Её концептуальная база включает официальный перечень традиционных ценностей, принципы государственной гуманитарной политики, анализ угроз ценностному суверенитету, а также сценарный и программно-целевой подходы. Формально реализована в логике OWL.
+    """)
 
-classes_list = filter_by_ru_label(all_classes)
-selected_classes = st.sidebar.multiselect("Классы", options=classes_list, format_func=lambda x: uri_label(g, x))
+    g = load_graph()
+    classes, obj_props, dt_props, individuals, labels, ru_uris = get_entities_and_labels_ru(g)
 
-properties_list = filter_by_ru_label(all_properties)
-selected_properties = st.sidebar.multiselect("Свойства", options=properties_list, format_func=lambda x: uri_label(g, x))
+    def create_options(uri_set):
+        options = []
+        for uri in uri_set:
+            lab = labels.get(uri, str(uri))
+            options.append((lab, uri))
+        options.sort(key=lambda x: x[0].lower())
+        return options
 
-individuals_list = filter_by_ru_label(all_individuals)
-selected_individuals = st.sidebar.multiselect("Индивиды", options=individuals_list, format_func=lambda x: uri_label(g, x))
+    classes_options = create_options(classes)
+    props_options = create_options(obj_props.union(dt_props))
+    indiv_options = create_options(individuals)
 
-# Строим граф с выбранными фильтрами
-net = build_network_graph(g, selected_classes, selected_properties, selected_individuals)
+    classes_selected = st.multiselect("Фильтр по классам", [lab for lab, _ in classes_options])
+    props_selected = st.multiselect("Фильтр по свойствам", [lab for lab, _ in props_options])
+    indiv_selected = st.multiselect("Фильтр по индивидуумам", [lab for lab, _ in indiv_options])
 
-# Рендерим граф в HTML-файл во временном файле и показываем через компоненты Streamlit
-with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as tmp_file:
-    net.show(tmp_file.name)
-    html_path = tmp_file.name
+    def selected_to_uri(selected_labels, options):
+        label_to_uri = {lab: uri for lab, uri in options}
+        return set(label_to_uri[lab] for lab in selected_labels if lab in label_to_uri)
 
-# Отображаем граф в Streamlit
-st.components.v1.html(open(html_path, "r", encoding="utf-8").read(), height=750, scrolling=True)
+    classes_filter = selected_to_uri(classes_selected, classes_options) if classes_selected else None
+    props_filter = selected_to_uri(props_selected, props_options) if props_selected else None
+    indiv_filter = selected_to_uri(indiv_selected, indiv_options) if indiv_selected else None
 
-# Легенда (цвета узлов)
-st.markdown("""
-<style>
-.legend-item {
-    display: inline-block;
-    margin-right: 15px;
-    font-weight: 600;
-    font-size: 14px;
-}
-.legend-color {
-    display: inline-block;
-    width: 18px;
-    height: 18px;
-    margin-right: 6px;
-    vertical-align: middle;
-    border-radius: 4px;
-}
-</style>
-<div>
-    <div class="legend-item"><span class="legend-color" style="background:#1f78b4"></span>Класс</div>
-    <div class="legend-item"><span class="legend-color" style="background:#ff7f00"></span>Объектное свойство</div>
-    <div class="legend-item"><span class="legend-color" style="background:#33a02c"></span>Дата-свойство</div>
-    <div class="legend-item"><span class="legend-color" style="background:#6a3d9a"></span>Индивид</div>
-</div>
-""", unsafe_allow_html=True)
+    html_file = draw_graph(g, classes_filter, props_filter, indiv_filter, classes, obj_props, dt_props, individuals, labels, ru_uris)
 
-# Подвал с авторами
-st.caption("""
-Разработчики ресурса: И.Д. Мамаев
-<a href="mailto:mamaev_id@voenmeh.ru" style="text-decoration: none; margin-left: 5px; background: none; border: none; padding: 0;">
-    <span style="font-size: 1.2em; background: transparent;">📧</span>
-</a>,
-А.В. Лаптева
-<a href="mailto:lapteva_av@voenmeh.ru" style="text-decoration: none; margin-left: 5px; background: none; border: none; padding: 0;">
-    <span style="font-size: 1.2em; background: transparent;">📧</span>
-</a>
-""", unsafe_allow_html=True)
+    html_content = open(html_file, "r", encoding="utf-8").read()
+    st.components.v1.html(html_content, height=750)
+    os.unlink(html_file)
+
+    st.markdown("""
+    <style>
+    .legend-item {
+        display: flex; 
+        align-items: center; 
+        margin-bottom: 4px;
+    }
+    .legend-color {
+        width: 18px; 
+        height: 18px; 
+        margin-right: 8px; 
+        border-radius: 4px;
+        display: inline-block;
+    }
+    </style>
+    <div class="legend-item"><span class="legend-color" style="background:#1f77b4"></span> Класс (Class)</div>
+    <div class="legend-item"><span class="legend-color" style="background:#ff7f0e"></span> Свойство (Property)</div>
+    <div class="legend-item"><span class="legend-color" style="background:#2ca02c"></span> Индивид (Individual)</div>
+    <div class="legend-item"><span class="legend-color" style="background:#7f7f7f"></span> Прочее</div>
+    """, unsafe_allow_html=True)
+
+    st.caption("""
+    Разработчики ресурса: <b>И.Д. Мамаев</b> 
+    <a href="mailto:mamaev_id@voenmeh.ru" style="text-decoration: none; margin-left: 5px;">
+        <span style="font-size: 1.2em; background: transparent;">📧</span>
+    </a>, 
+    <b>А.В. Лаптева</b> 
+    <a href="mailto:lapteva_av@voenmeh.ru" style="text-decoration: none; margin-left: 5px;">
+        <span style="font-size: 1.2em; background: transparent;">📧</span>
+    </a>
+    """ , unsafe_allow_html=True)
+
+if __name__ == "__main__":
+    main()
