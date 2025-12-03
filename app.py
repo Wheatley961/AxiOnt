@@ -110,7 +110,7 @@ def export_graph_image(g, fmt="png", graph_mode="all"):
 
 def main():
     st.set_page_config(layout="wide")
-    st.title("Онтология государственной ценностной политики (Указ № 809)")
+    st.title("Аксиологическая онтология государственной ценностной политики РФ (Указ № 809)")
 
     with st.expander("Описание проекта и назначение онтологии", expanded=True):
         st.markdown("""
@@ -183,6 +183,16 @@ def main():
                 mime=f"image/" + export_fmt
             )
         os.remove(img_path)
+
+st.caption("""
+Разработчики ресурса: И.Д. Мамаев 
+<a href="mailto:mamaev_id@voenmeh.ru" style="text-decoration: none; margin-left: 5px; background: none; border: none; padding: 0;">
+    <span style="font-size: 1.2em; background: transparent;">📧</span>,
+    А.В. Лаптева
+    <a href="mailto:lapteva_av@voenmeh.ru" style="text-decoration: none; margin-left: 5px; background: none; border: none; padding: 0;">
+    <span style="font-size: 1.2em; background: transparent;">📧</span>
+</a>
+""", unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
