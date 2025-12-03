@@ -7,7 +7,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import os
 
-ONTOLOGY_URL = "https://raw.githubusercontent.com/Wheatley961/AxiOnt/main/axiology_ontology_ru.ttl"
+ONTOLOGY_URL = "https://github.com/Wheatley961/AxiOnt/blob/main/axiology_ontology_ru.ttl"
 
 
 @st.cache_resource
