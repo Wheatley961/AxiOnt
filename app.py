@@ -45,7 +45,39 @@ def load_graph():
     g.parse(ONTOLOGY_URL, format="turtle")
     return g
 
-def draw_graph(g, filter_type=None, filter_value=None):
+def draw_graph(g, filter_type=None, filter_value=None, graph_mode="all"):
+    net = Network(height="700px", width="100%", directed=True)
+    classes, obj_props, dt_props, individuals = get_entities(g)
+
+    for s, p, o in g:
+        # Фильтрация по типу графа
+        if graph_mode == "object" and o not in obj_props:
+            continue
+        if graph_mode == "datatype" and o not in dt_props:
+            continue
+        if graph_mode == "taxonomy" and o != OWL.Class:
+            continue
+
+        # Цветовая дифференциация
+        def node_color(node):
+            if node in classes:
+                return "#1f77b4"  # синий — классы
+            if node in obj_props or node in dt_props:
+                return "#ff7f0e"  # оранжевый — свойства
+            if node in individuals:
+                return "#2ca02c"  # зелёный — индивиды
+            return "#7f7f7f"      # серый — неизвестное
+
+        if filter_type == "class" and str(s) != filter_value and str(o) != filter_value:
+            continue
+
+        net.add_node(str(s), label=str(s), color=node_color(s))
+        net.add_node(str(o), label=str(o), color=node_color(o))
+        net.add_edge(str(s), str(o), label=str(p))
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
+    net.show(tmp.name)
+    return tmp.name(g, filter_type=None, filter_value=None):
     net = Network(height="700px", width="100%", directed=True)
     for s, p, o in g:
         if filter_type == "class" and str(s) != filter_value and str(o) != filter_value:
@@ -70,8 +102,24 @@ html_file = draw_graph(g)
 st.components.v1.html(open(html_file).read(), height=750)
 
 st.subheader("Фильтрация визуализации")
+
+# Новый переключатель типа графа
+graph_mode = st.selectbox(
+    "Тип графа",
+    ["all", "object", "datatype", "taxonomy"],
+    format_func=lambda x: {
+        "all": "Все связи",
+        "object": "Только объектные свойства",
+        "datatype": "Только datatype-свойства",
+        "taxonomy": "Классовая таксономия",
+    }[x]
+)
+
 mode = st.selectbox("Тип фильтра", ["Нет", "Класс", "Свойство", "Экземпляр"])
 value = st.text_input("Введите URI или локальное имя для фильтрации")
-if st.button("Применить") and mode != "Нет" and value:
+if st.button("Применить"):
+    html_file_filtered = draw_graph(g, filter_type=mode.lower() if mode != "Нет" else None, filter_value=value, graph_mode=graph_mode)
+    st.components.v1.html(open(html_file_filtered).read(), height=750)
+("Применить") and mode != "Нет" and value:
     html_file_filtered = draw_graph(g, filter_type=mode.lower(), filter_value=value)
     st.components.v1.html(open(html_file_filtered).read(), height=750)
