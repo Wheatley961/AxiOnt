@@ -1,244 +1,210 @@
+import streamlit as st
+import requests
+from rdflib import Graph, OWL
+from pyvis.network import Network
+import tempfile
+import networkx as nx
+import matplotlib.pyplot as plt
+import os
 
-@prefix : <http://example.org/axiology#> .
-@prefix owl: <http://www.w3.org/2002/07/owl#> .
-@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
-@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-
-<http://example.org/axiology> a owl:Ontology ;
-    rdfs:comment "Детальная аксиологическая онтология (OWL/Turtle) для WebProtege, основанная на Указе Президента РФ № 809 от 9 ноября 2022 г." ;
-    rdfs:seeAlso <urn:decree:rf:2022:809> .
-
-################################################################
-# Классы
-################################################################
-:Policy a owl:Class ;
-    rdfs:label "Государственная политика"@ru ;
-    rdfs:comment "Высокоуровневая политика государства (например, основы государственной политики по сохранению традиционных ценностей)."@ru .
-
-:TraditionalValue a owl:Class ;
-    rdfs:label "Традиционная ценность"@ru ;
-    rdfs:comment "Духовные, моральные и культурные ценности, перечисленные в Указе № 809."@ru .
-
-:Instrument a owl:Class ;
-    rdfs:label "Инструмент реализации"@ru ;
-    rdfs:comment "Средства реализации государственной политики."@ru .
-
-:Actor a owl:Class ;
-    rdfs:label "Актор"@ru ;
-    rdfs:comment "Субъект, участвующий в реализации политики."@ru .
-
-:Threat a owl:Class ;
-    rdfs:label "Угроза"@ru ;
-    rdfs:comment "Угрозы традиционным ценностям."@ru .
-
-:Goal a owl:Class ;
-    rdfs:label "Цель"@ru ;
-    rdfs:comment "Стратегическая цель государственной политики."@ru .
-
-:Task a owl:Class ;
-    rdfs:label "Задача"@ru ;
-    rdfs:comment "Операционная задача для достижения цели."@ru .
-
-:Area a owl:Class ;
-    rdfs:label "Сфера реализации"@ru ;
-    rdfs:comment "Отрасли и направления применения политики."@ru .
-
-:MonitoringIndicator a owl:Class ;
-    rdfs:label "Индикатор мониторинга"@ru ;
-    rdfs:comment "Метрики для оценки выполнения государственной политики."@ru .
-
-:Scenario a owl:Class ;
-    rdfs:label "Сценарий"@ru ;
-    rdfs:comment "Вариант развития ситуации."@ru .
-
-:CulturalHeritageObject a owl:Class ;
-    rdfs:label "Объект культурного наследия"@ru ;
-    rdfs:comment "Объекты, требующие государственной защиты."@ru .
-
-:ReligiousTradition a owl:Class ;
-    rdfs:label "Религиозная традиция"@ru ;
-    rdfs:comment "Традиционные религии России."@ru .
+ONTOLOGY_URL = "https://raw.githubusercontent.com/Wheatley961/AxiOnt/main/axiology_ontology_ru.ttl"
 
 
-################################################################
-# Подклассы инструментов
-################################################################
-:LegalInstrument a owl:Class ; rdfs:subClassOf :Instrument ; rdfs:label "Правовой инструмент"@ru .
-:OrganizationalInstrument a owl:Class ; rdfs:subClassOf :Instrument ; rdfs:label "Организационный инструмент"@ru .
-:ScientificInstrument a owl:Class ; rdfs:subClassOf :Instrument ; rdfs:label "Научно-аналитический инструмент"@ru .
-:InformationalInstrument a owl:Class ; rdfs:subClassOf :Instrument ; rdfs:label "Информационный инструмент"@ru .
-:FinancialInstrument a owl:Class ; rdfs:subClassOf :Instrument ; rdfs:label "Финансовый инструмент"@ru .
-
-################################################################
-# Подклассы акторов
-################################################################
-:StateBody a owl:Class ; rdfs:subClassOf :Actor ; rdfs:label "Государственный орган"@ru .
-:FederalExecutiveBody a owl:Class ; rdfs:subClassOf :StateBody ; rdfs:label "Федеральный орган исполнительной власти"@ru .
-:LawEnforcementAgency a owl:Class ; rdfs:subClassOf :StateBody ; rdfs:label "Правоохранительный орган"@ru .
-:ReligiousOrganization a owl:Class ; rdfs:subClassOf :Actor, :ReligiousTradition ; rdfs:label "Религиозная организация"@ru .
-:CivilSocietyOrganization a owl:Class ; rdfs:subClassOf :Actor ; rdfs:label "Общественная организация"@ru .
-:MediaOrganization a owl:Class ; rdfs:subClassOf :Actor ; rdfs:label "Средство массовой информации"@ru .
-
-################################################################
-# Индивиды — традиционные ценности
-################################################################
-:Life a owl:NamedIndividual ; rdf:type :TraditionalValue ; rdfs:label "Жизнь"@ru .
-:Dignity a owl:NamedIndividual ; rdf:type :TraditionalValue ; rdfs:label "Достоинство"@ru .
-:HumanRightsAndFreedoms a owl:NamedIndividual ; rdf:type :TraditionalValue ; rdfs:label "Права и свободы человека"@ru .
-:Patriotism a owl:NamedIndividual ; rdf:type :TraditionalValue ; rdfs:label "Патриотизм"@ru .
-:CivicResponsibility a owl:NamedIndividual ; rdf:type :TraditionalValue ; rdfs:label "Гражданская ответственность"@ru .
-:ServiceToFatherland a owl:NamedIndividual ; rdf:type :TraditionalValue ; rdfs:label "Служение Отечеству"@ru .
-:HighMoralIdeals a owl:NamedIndividual ; rdf:type :TraditionalValue ; rdfs:label "Высокие нравственные идеалы"@ru .
-:StrongFamily a owl:NamedIndividual ; rdf:type :TraditionalValue ; rdfs:label "Крепкая семья"@ru .
-:ProductiveLabor a owl:NamedIndividual ; rdf:type :TraditionalValue ; rdfs:label "Трудолюбие"@ru .
-:PrioritySpiritualOverMaterial a owl:NamedIndividual ; rdf:type :TraditionalValue ; rdfs:label "Приоритет духовного над материальным"@ru .
-:Humanism a owl:NamedIndividual ; rdf:type :TraditionalValue ; rdfs:label "Гуманизм"@ru .
-:Mercy a owl:NamedIndividual ; rdf:type :TraditionalValue ; rdfs:label "Милосердие"@ru .
-:Justice a owl:NamedIndividual ; rdf:type :TraditionalValue ; rdfs:label "Справедливость"@ru .
-:Collectivism a owl:NamedIndividual ; rdf:type :TraditionalValue ; rdfs:label "Коллективизм"@ru .
-:MutualHelp a owl:NamedIndividual ; rdf:type :TraditionalValue ; rdfs:label "Взаимопомощь"@ru .
-:MutualRespect a owl:NamedIndividual ; rdf:type :TraditionalValue ; rdfs:label "Взаимное уважение"@ru .
-:HistoricalMemory a owl:NamedIndividual ; rdf:type :TraditionalValue ; rdfs:label "Историческая память"@ru .
-:UnityOfPeoples a owl:NamedIndividual ; rdf:type :TraditionalValue ; rdfs:label "Единство народов России"@ru .
-
-################################################################
-# Угрозы
-################################################################
-:DestructiveIdeology a owl:NamedIndividual ; rdf:type :Threat ; rdfs:label "Деструктивная идеология"@ru .
-:Extremism a owl:NamedIndividual ; rdf:type :Threat ; rdfs:label "Экстремизм и терроризм"@ru .
-:ForeignInfluence a owl:NamedIndividual ; rdf:type :Threat ; rdfs:label "Враждебное внешнее влияние"@ru .
-:InformationPsychologicalImpact a owl:NamedIndividual ; rdf:type :Threat ; rdfs:label "Информационно‑психологическое воздействие"@ru .
-:HistoricalFalsification a owl:NamedIndividual ; rdf:type :Threat ; rdfs:label "Фальсификация истории"@ru .
-
-################################################################
-# Объектные свойства
-################################################################
-:hasValue a owl:ObjectProperty ;
-    rdfs:label "включает ценность"@ru ;
-    rdfs:comment "Политика включает традиционные ценности."@ru .
-
-:targetsThreat a owl:ObjectProperty ;
-    rdfs:label "направлена против угрозы"@ru .
-
-:implementedBy a owl:ObjectProperty ;
-    rdfs:label "реализуется актором"@ru .
-
-:usesInstrument a owl:ObjectProperty ;
-    rdfs:label "использует инструмент"@ru .
-
-:hasGoal a owl:ObjectProperty ;
-    rdfs:label "имеет цель"@ru .
-
-:hasTask a owl:ObjectProperty ;
-    rdfs:label "имеет задачу"@ru .
-
-:appliesInArea a owl:ObjectProperty ;
-    rdfs:label "реализуется в сфере"@ru .
-
-:monitoredByIndicator a owl:ObjectProperty ;
-    rdfs:label "мониторится индикатором"@ru .
-
-:hasScenario a owl:ObjectProperty ;
-    rdfs:label "имеет сценарий"@ru .
-
-:protectsHeritage a owl:ObjectProperty ;
-    rdfs:label "охраняет наследие"@ru .
-
-:supportsReligion a owl:ObjectProperty ;
-    rdfs:label "поддерживает религию"@ru .
+@st.cache_resource
+def load_graph():
+    g = Graph()
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; StreamlitApp/1.0)"
+    }
+    response = requests.get(ONTOLOGY_URL, headers=headers)
+    response.raise_for_status()
+    turtle_data = response.text
+    g.parse(data=turtle_data, format="turtle")
+    return g
 
 
-################################################################
-# Датные свойства
-################################################################
-:hasDescription a owl:DatatypeProperty ; rdfs:label "описание"@ru .
-:indicatorType a owl:DatatypeProperty ; rdfs:label "тип индикатора"@ru .
-:indicatorSource a owl:DatatypeProperty ; rdfs:label "источник индикатора"@ru .
-:effectiveFrom a owl:DatatypeProperty ; rdfs:label "дата вступления в силу"@ru .
+def get_entities(g):
+    classes = set()
+    object_props = set()
+    datatype_props = set()
+    individuals = set()
+    for s, p, o in g:
+        if o == OWL.Class:
+            classes.add(s)
+        if o == OWL.ObjectProperty:
+            object_props.add(s)
+        if o == OWL.DatatypeProperty:
+            datatype_props.add(s)
+        if o == OWL.NamedIndividual:
+            individuals.add(s)
+    return classes, object_props, datatype_props, individuals
 
-################################################################
-# Индивид — сама политика по Указу № 809
-################################################################
-:Decree809_Policy a owl:NamedIndividual ;
-    rdf:type :Policy ;
-    rdfs:label "Государственная политика по сохранению и укреплению традиционных духовно‑нравственных ценностей (Указ № 809)"@ru ;
-    :hasDescription "Установлена Указом Президента РФ № 809 от 9 ноября 2022 года."@ru ;
-    :effectiveFrom "2022-11-09"^^xsd:date ;
-    :hasValue :Life , :Dignity , :HumanRightsAndFreedoms ,
-              :Patriotism , :CivicResponsibility , :ServiceToFatherland ,
-              :HighMoralIdeals , :StrongFamily , :ProductiveLabor ,
-              :PrioritySpiritualOverMaterial , :Humanism , :Mercy ,
-              :Justice , :Collectivism , :MutualHelp , :MutualRespect ,
-              :HistoricalMemory , :UnityOfPeoples ;
-    :targetsThreat :DestructiveIdeology , :Extremism ,
-                   :ForeignInfluence , :InformationPsychologicalImpact ,
-                   :HistoricalFalsification .
 
-################################################################
-# Сферы реализации
-################################################################
-:EducationArea a owl:NamedIndividual ; rdf:type :Area ; rdfs:label "Образование и воспитание"@ru .
-:CultureArea a owl:NamedIndividual ; rdf:type :Area ; rdfs:label "Культура"@ru .
-:ScienceArea a owl:NamedIndividual ; rdf:type :Area ; rdfs:label "Наука"@ru .
-:InterethnicRelationsArea a owl:NamedIndividual ; rdf:type :Area ; rdfs:label "Межэтнические и межрелигиозные отношения"@ru .
-:MediaArea a owl:NamedIndividual ; rdf:type :Area ; rdfs:label "Средства массовой информации"@ru .
-:InternationalCooperationArea a owl:NamedIndividual ; rdf:type :Area ; rdfs:label "Международное сотрудничество"@ru .
+def draw_graph(g, filter_type=None, filter_value=None, graph_mode="all"):
+    net = Network(height="700px", width="100%", directed=True)
+    classes, obj_props, dt_props, individuals = get_entities(g)
 
-################################################################
-# Связи политики со сферами
-################################################################
-:Decree809_Policy :appliesInArea :EducationArea , :CultureArea , :ScienceArea ,
-                                   :InterethnicRelationsArea , :MediaArea ,
-                                   :InternationalCooperationArea .
+    def node_color(node):
+        if node in classes:
+            return "#1f77b4"  # blue - classes
+        if node in obj_props or node in dt_props:
+            return "#ff7f0e"  # orange - properties
+        if node in individuals:
+            return "#2ca02c"  # green - individuals
+        return "#7f7f7f"      # gray - others
 
-################################################################
-# Наследие и религии
-################################################################
-:CulturalHeritage a owl:NamedIndividual ; rdf:type :CulturalHeritageObject ;
-    rdfs:label "Объекты культурного наследия народов России"@ru .
+    for s, p, o in g:
+        # Фильтрация по типу графа
+        if graph_mode == "object" and p not in obj_props:
+            continue
+        if graph_mode == "datatype" and p not in dt_props:
+            continue
+        if graph_mode == "taxonomy" and p != OWL.subClassOf:
+            continue
 
-:Orthodoxy a owl:NamedIndividual ; rdf:type :ReligiousTradition ; rdfs:label "Православие"@ru .
-:Islam a owl:NamedIndividual ; rdf:type :ReligiousTradition ; rdfs:label "Ислам"@ru .
-:Buddhism a owl:NamedIndividual ; rdf:type :ReligiousTradition ; rdfs:label "Буддизм"@ru .
-:Judaism a owl:NamedIndividual ; rdf:type :ReligiousTradition ; rdfs:label "Иудаизм"@ru .
+        # Фильтр по конкретному классу/свойству/индивиду
+        if filter_type == "class" and str(s) != filter_value and str(o) != filter_value:
+            continue
+        if filter_type == "property" and str(p) != filter_value:
+            continue
+        if filter_type == "individual" and str(s) != filter_value and str(o) != filter_value:
+            continue
 
-:Decree809_Policy :protectsHeritage :CulturalHeritage ;
-                   :supportsReligion :Orthodoxy , :Islam , :Buddhism , :Judaism .
+        net.add_node(str(s), label=str(s), color=node_color(s))
+        net.add_node(str(o), label=str(o), color=node_color(o))
+        net.add_edge(str(s), str(o), label=str(p))
 
-################################################################
-# Цели, задачи, индикаторы, сценарии
-################################################################
-:Goal_Preserve a owl:NamedIndividual ; rdf:type :Goal ;
-    rdfs:label "Сохранение и укрепление традиционных ценностей"@ru .
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
+    net.show(tmp.name)
+    return tmp.name
 
-:Task_Coordination a owl:NamedIndividual ; rdf:type :Task ; rdfs:label "Межведомственная координация"@ru .
-:Task_SupportProjects a owl:NamedIndividual ; rdf:type :Task ; rdfs:label "Поддержка культурно‑образовательных проектов"@ru .
-:Task_ProtectHeritage a owl:NamedIndividual ; rdf:type :Task ; rdfs:label "Охрана культурного наследия"@ru .
-:Task_CounterIdeology a owl:NamedIndividual ; rdf:type :Task ; rdfs:label "Противодействие деструктивной идеологии"@ru .
 
-:Goal_Preserve :hasTask :Task_Coordination , :Task_SupportProjects ,
-                        :Task_ProtectHeritage , :Task_CounterIdeology .
+def export_graph_image(g, fmt="png", graph_mode="all"):
+    G = nx.DiGraph()
+    classes, obj_props, dt_props, individuals = get_entities(g)
 
-:Decree809_Policy :hasGoal :Goal_Preserve .
+    for s, p, o in g:
+        if graph_mode == "object" and p not in obj_props:
+            continue
+        if graph_mode == "datatype" and p not in dt_props:
+            continue
+        if graph_mode == "taxonomy" and p != OWL.subClassOf:
+            continue
+        G.add_edge(str(s), str(o), label=str(p))
 
-:Indicator_Stat a owl:NamedIndividual ; rdf:type :MonitoringIndicator ;
-    rdfs:label "Официальная статистика"@ru ;
-    :indicatorType "статистика"@ru ;
-    :indicatorSource "Росстат"@ru .
+    plt.figure(figsize=(12, 12))
+    pos = nx.spring_layout(G, k=0.5, iterations=50)
+    nx.draw(G, pos, with_labels=True, font_size=6, node_color="skyblue", edge_color="gray", arrowsize=10)
+    img_path = f"graph_export.{fmt}"
+    plt.savefig(img_path, format=fmt, dpi=300)
+    plt.close()
+    return img_path
 
-:Indicator_Survey a owl:NamedIndividual ; rdf:type :MonitoringIndicator ;
-    rdfs:label "Социологические опросы"@ru ;
-    :indicatorType "опрос"@ru ;
-    :indicatorSource "исследовательские центры"@ru .
 
-:Decree809_Policy :monitoredByIndicator :Indicator_Stat , :Indicator_Survey .
+def main():
+    st.set_page_config(layout="wide")
+    st.title("Онтология государственной ценностной политики (Указ № 809)")
 
-:Scenario_Positive a owl:NamedIndividual ; rdf:type :Scenario ;
-    rdfs:label "Позитивный сценарий"@ru .
+    # Описание проекта (примерно 300 слов)
+    with st.expander("Описание проекта и назначение онтологии", expanded=True):
+        st.markdown("""
+        Цель создания онтологии
 
-:Scenario_Negative a owl:NamedIndividual ; rdf:type :Scenario ;
-    rdfs:label "Негативный сценарий"@ru .
+        Онтология предназначена для:
 
-:Decree809_Policy :hasScenario :Scenario_Positive , :Scenario_Negative .
+        - формального представления положений государственной ценностной политики;
+        - семантической интеграции данных органов власти, научных центров и экспертных систем;
+        - поддержки анализа угроз традиционным ценностям;
+        - моделирования взаимосвязей между ценностями, целями, задачами, инструментами и участниками реализации политики;
+        - создания основы для автоматизированного мониторинга, прогнозирования и принятия управленческих решений.
 
+        Концептуальная основа
+
+        Онтология построена на базе:
+
+        - официально закреплённого перечня традиционных российских духовно-нравственных ценностей;
+        - положений о вызовах и угрозах ценностному суверенитету;
+        - принципов системной государственной политики в гуманитарной сфере;
+        - сценарного подхода к оценке последствий воздействия угроз;
+        - программно-целевого подхода к управлению.
+
+        Формально онтология реализована в логике OWL 2, с поддержкой:
+
+        - таксономий (классы и подклассы),
+        - реляционных связей (объектные свойства),
+        - атрибутивных характеристик (datatype properties),
+        - индивидуальных сущностей (экземпляров).
+
+        Структура онтологии (основные классы)
+
+        (Далее - как в твоём тексте...)
+
+        """)
+
+    g = load_graph()
+
+    st.sidebar.title("Параметры визуализации")
+
+    graph_mode = st.sidebar.selectbox(
+        "Тип графа",
+        ["all", "object", "datatype", "taxonomy"],
+        format_func=lambda x: {
+            "all": "Все связи",
+            "object": "Только объектные свойства",
+            "datatype": "Только datatype-свойства",
+            "taxonomy": "Классовая таксономия",
+        }[x]
+    )
+
+    classes, obj_props, dt_props, individuals = get_entities(g)
+
+    mode = st.sidebar.selectbox(
+        "Фильтр по типу сущности",
+        ["Нет", "Класс", "Свойство", "Индивид"]
+    )
+
+    value = None
+    if mode != "Нет":
+        options = []
+        if mode == "Класс":
+            options = sorted(str(c) for c in classes)
+        elif mode == "Свойство":
+            options = sorted(str(p) for p in obj_props.union(dt_props))
+        elif mode == "Индивид":
+            options = sorted(str(i) for i in individuals)
+        value = st.sidebar.selectbox("Выберите значение", options)
+
+    if st.sidebar.button("Применить фильтр"):
+        html_file = draw_graph(
+            g,
+            filter_type=mode.lower() if mode != "Нет" else None,
+            filter_value=value,
+            graph_mode=graph_mode
+        )
+        st.components.v1.html(open(html_file).read(), height=750)
+        os.unlink(html_file)  # удаляем временный файл
+
+    else:
+        st.subheader("Полный граф онтологии")
+        html_file = draw_graph(g, graph_mode=graph_mode)
+        st.components.v1.html(open(html_file).read(), height=750)
+        os.unlink(html_file)
+
+    st.subheader("Экспорт графа в изображение")
+
+    export_fmt = st.selectbox("Выберите формат изображения", ["png", "svg"])
+
+    if st.button("Экспортировать граф"):
+        img_path = export_graph_image(g, fmt=export_fmt, graph_mode=graph_mode)
+        with open(img_path, "rb") as f:
+            btn = st.download_button(
+                label=f"Скачать граф в формате {export_fmt.upper()}",
+                data=f,
+                file_name=img_path,
+                mime=f"image/{export_fmt}"
+            )
+        os.remove(img_path)
+
+
+if __name__ == "__main__":
+    main()
