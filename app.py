@@ -120,6 +120,6 @@ value = st.text_input("Введите URI или локальное имя дл�
 if st.button("Применить"):
     html_file_filtered = draw_graph(g, filter_type=mode.lower() if mode != "Нет" else None, filter_value=value, graph_mode=graph_mode)
     st.components.v1.html(open(html_file_filtered).read(), height=750)
-("Применить") and mode != "Нет" and value:
+elif ("Применить") and mode != "Нет" and value:
     html_file_filtered = draw_graph(g, filter_type=mode.lower(), filter_value=value)
     st.components.v1.html(open(html_file_filtered).read(), height=750)
