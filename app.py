@@ -77,7 +77,7 @@ def draw_graph(g, filter_type=None, filter_value=None, graph_mode="all"):
 
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
     net.show(tmp.name)
-    return tmp.name(g, filter_type=None, filter_value=None):
+    return tmp.name:
     net = Network(height="700px", width="100%", directed=True)
     for s, p, o in g:
         if filter_type == "class" and str(s) != filter_value and str(o) != filter_value:
