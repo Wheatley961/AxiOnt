@@ -113,7 +113,7 @@ def main():
 
     classes_selected = st.multiselect("Фильтр по классам", [lab for lab, _ in classes_options])
     props_selected = st.multiselect("Фильтр по свойствам", [lab for lab, _ in props_options])
-    indiv_selected = st.multiselect("Фильтр по индивидуумам", [lab for lab, _ in indiv_options])
+    indiv_selected = st.multiselect("Фильтр по экземплярам", [lab for lab, _ in indiv_options])
 
     def selected_to_uri(selected_labels, options):
         label_to_uri = {lab: uri for lab, uri in options}
@@ -144,9 +144,8 @@ def main():
         display: inline-block;
     }
     </style>
-    <div class="legend-item"><span class="legend-color" style="background:#1f77b4"></span> Класс (Class)</div>
-    <div class="legend-item"><span class="legend-color" style="background:#ff7f0e"></span> Свойство (Property)</div>
-    <div class="legend-item"><span class="legend-color" style="background:#2ca02c"></span> Индивид (Individual)</div>
+    <div class="legend-item"><span class="legend-color" style="background:#1f77b4"></span> Класс</div>
+    <div class="legend-item"><span class="legend-color" style="background:#2ca02c"></span> Экземпляр</div>
     <div class="legend-item"><span class="legend-color" style="background:#7f7f7f"></span> Прочее</div>
     """, unsafe_allow_html=True)
 
