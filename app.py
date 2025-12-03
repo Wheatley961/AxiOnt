@@ -29,7 +29,6 @@ def get_entities(g):
     datatype_props = set()
     individuals = set()
 
-    # Поиск сущностей по типам
     for s, p, o in g:
         if o == OWL.Class:
             classes.add(s)
@@ -52,147 +51,86 @@ def node_color(node, classes, obj_props, dt_props, individuals):
     return "#7f7f7f"      # серый - остальные
 
 
-def draw_graph(g, filter_type=None, filter_value=None, graph_mode="all"):
+def draw_graph(g, filter_type=None, filter_value=None):
     classes, obj_props, dt_props, individuals = get_entities(g)
 
     net = Network(height="700px", width="100%", directed=True)
     net.barnes_hut()
 
     for s, p, o in g:
-        # Фильтрация по типу графа
-        if graph_mode == "object" and p not in obj_props:
-            continue
-        if graph_mode == "datatype" and p not in dt_props:
-            continue
-        if graph_mode == "taxonomy" and p != OWL.subClassOf:
-            continue
-
-        # Фильтрация по выбранному фильтру
-        if filter_type == "class" and str(s) != filter_value and str(o) != filter_value:
-            continue
-        if filter_type == "property" and str(p) != filter_value:
-            continue
-        if filter_type == "individual" and str(s) != filter_value and str(o) != filter_value:
-            continue
+        # Фильтр
+        if filter_type == "class":
+            if str(s) != filter_value and str(o) != filter_value:
+                continue
+        elif filter_type == "property":
+            if str(p) != filter_value:
+                continue
+        elif filter_type == "individual":
+            if str(s) != filter_value and str(o) != filter_value:
+                continue
 
         net.add_node(str(s), label=str(s), color=node_color(s, classes, obj_props, dt_props, individuals))
         net.add_node(str(o), label=str(o), color=node_color(o, classes, obj_props, dt_props, individuals))
         net.add_edge(str(s), str(o), label=str(p))
 
-    # Запись в временный файл
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
-    # Вместо net.show() — используем net.write_html() с notebook=False
     net.write_html(tmp.name, notebook=False)
     return tmp.name
-
-
-def export_graph_image(g, fmt="png", graph_mode="all"):
-    G = nx.DiGraph()
-    classes, obj_props, dt_props, individuals = get_entities(g)
-
-    for s, p, o in g:
-        if graph_mode == "object" and p not in obj_props:
-            continue
-        if graph_mode == "datatype" and p not in dt_props:
-            continue
-        if graph_mode == "taxonomy" and p != OWL.subClassOf:
-            continue
-        G.add_edge(str(s), str(o), label=str(p))
-
-    plt.figure(figsize=(12, 12))
-    pos = nx.spring_layout(G, k=0.5, iterations=50)
-    nx.draw(G, pos, with_labels=True, font_size=6, node_color="skyblue", edge_color="gray", arrowsize=10)
-    img_path = f"graph_export.{fmt}"
-    plt.savefig(img_path, format=fmt, dpi=300)
-    plt.close()
-    return img_path
 
 
 def main():
     st.set_page_config(layout="wide")
     st.title("Аксиологическая онтология государственной ценностной политики РФ (Указ № 809)")
 
-    with st.expander("Описание проекта и назначение онтологии", expanded=True):
-        st.markdown("""
-        Онтология создана для формального представления государственной ценностной политики и моделирования взаимосвязей между ценностями, целями, задачами, инструментами и участниками, а также для формирования основы автоматизированного мониторинга, прогнозирования и поддержки управленческих решений. Её концептуальная база включает официальный перечень традиционных ценностей, принципы государственной гуманитарной политики, анализ угроз ценностному суверенитету, а также сценарный и программно-целевой подходы. Формально реализована в логике OWL.
+    st.markdown("""
+    Онтология создана для формального представления государственной ценностной политики и моделирования взаимосвязей между ценностями, целями, задачами, инструментами и участниками, а также для формирования основы автоматизированного мониторинга, прогнозирования и поддержки управленческих решений.
 
-        """)
+    Её концептуальная база включает официальный перечень традиционных ценностей, принципы государственной гуманитарной политики, анализ угроз ценностному суверенитету, а также сценарный и программно-целевой подходы. Формально реализована в логике OWL.
+    """)
 
     g = load_graph()
 
-    st.sidebar.title("Параметры визуализации")
+    # Сначала показываем весь граф без фильтра
+    st.subheader("Весь граф онтологии")
+    html_file = draw_graph(g)
+    html_content = open(html_file, "r", encoding="utf-8").read()
+    st.components.v1.html(html_content, height=750)
+    os.unlink(html_file)
 
-    graph_mode = st.sidebar.selectbox(
-        "Тип графа",
-        ["all", "object", "datatype", "taxonomy"],
-        format_func=lambda x: {
-            "all": "Все связи",
-            "object": "Только объектные свойства",
-            "datatype": "Только datatype-свойства",
-            "taxonomy": "Классовая таксономия",
-        }[x]
-    )
-
+    # Получаем сущности для выпадающих списков
     classes, obj_props, dt_props, individuals = get_entities(g)
 
-    mode = st.sidebar.selectbox(
-        "Фильтр по типу сущности",
-        ["Нет", "Класс", "Свойство", "Индивид"]
-    )
+    st.sidebar.title("Фильтр графа")
+    filter_type = st.sidebar.selectbox("Выберите тип для фильтрации", ["Нет", "Класс", "Свойство", "Индивид"])
 
-    value = None
-    if mode != "Нет":
+    filter_value = None
+    if filter_type != "Нет":
         options = []
-        if mode == "Класс":
+        if filter_type == "Класс":
             options = sorted(str(c) for c in classes)
-        elif mode == "Свойство":
+        elif filter_type == "Свойство":
             options = sorted(str(p) for p in obj_props.union(dt_props))
-        elif mode == "Индивид":
+        elif filter_type == "Индивид":
             options = sorted(str(i) for i in individuals)
-        value = st.sidebar.selectbox("Выберите значение", options)
+        filter_value = st.sidebar.selectbox(f"Выберите {filter_type.lower()}", options)
 
-    if st.sidebar.button("Применить фильтр"):
-        html_file = draw_graph(
-            g,
-            filter_type=mode.lower() if mode != "Нет" else None,
-            filter_value=value,
-            graph_mode=graph_mode
-        )
-        html_content = open(html_file, "r", encoding="utf-8").read()
-        st.components.v1.html(html_content, height=750)
-        os.unlink(html_file)  # удаляем временный файл
-
-    else:
-        st.subheader("Полный граф онтологии")
-        html_file = draw_graph(g, graph_mode=graph_mode)
+    if filter_type != "Нет" and filter_value:
+        st.subheader(f"Граф, отфильтрованный по {filter_type.lower()} '{filter_value}'")
+        html_file = draw_graph(g, filter_type=filter_type.lower(), filter_value=filter_value)
         html_content = open(html_file, "r", encoding="utf-8").read()
         st.components.v1.html(html_content, height=750)
         os.unlink(html_file)
 
-    st.subheader("Экспорт графа в изображение")
-
-    export_fmt = st.selectbox("Выберите формат изображения", ["png", "svg"])
-
-    if st.button("Экспортировать граф"):
-        img_path = export_graph_image(g, fmt=export_fmt, graph_mode=graph_mode)
-        with open(img_path, "rb") as f:
-            st.download_button(
-                label=f"Скачать граф в формате {export_fmt.upper()}",
-                data=f,
-                file_name=img_path,
-                mime=f"image/" + export_fmt
-            )
-        os.remove(img_path)
-
-st.caption("""
-Разработчики ресурса: И.Д. Мамаев 
-<a href="mailto:mamaev_id@voenmeh.ru" style="text-decoration: none; margin-left: 5px; background: none; border: none; padding: 0;">
-    <span style="font-size: 1.2em; background: transparent;">📧</span>,
-    А.В. Лаптева
-    <a href="mailto:lapteva_av@voenmeh.ru" style="text-decoration: none; margin-left: 5px; background: none; border: none; padding: 0;">
-    <span style="font-size: 1.2em; background: transparent;">📧</span>
-</a>
-""", unsafe_allow_html=True)
+    st.caption("""
+    Разработчики ресурса: <b>И.Д. Мамаев</b> 
+    <a href="mailto:mamaev_id@voenmeh.ru" style="text-decoration: none; margin-left: 5px;">
+        <span style="font-size: 1.2em; background: transparent;">📧</span>
+    </a>, 
+    <b>А.В. Лаптева</b> 
+    <a href="mailto:lapteva_av@voenmeh.ru" style="text-decoration: none; margin-left: 5px;">
+        <span style="font-size: 1.2em; background: transparent;">📧</span>
+    </a>
+    """, unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
