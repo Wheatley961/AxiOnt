@@ -59,7 +59,7 @@ def node_color(node, classes, obj_props, dt_props, individuals):
         return "#2ca02c"  # зелёный
     return "#7f7f7f"
 
-def draw_graph(g, classes_filter, props_filter, indiv_filter, classes, obj_props, dt_props, individuals, labels, ru_uris):
+def draw_graph(g, classes_filter, indiv_filter, classes, obj_props, dt_props, individuals, labels, ru_uris):
     net = Network(height="700px", width="100%", directed=True)
     net.barnes_hut()
 
@@ -73,8 +73,6 @@ def draw_graph(g, classes_filter, props_filter, indiv_filter, classes, obj_props
 
         # Проверяем фильтры
         if classes_filter and not (s in classes_filter or o in classes_filter):
-            continue
-        if props_filter and p not in props_filter:
             continue
         if indiv_filter and not (s in indiv_filter or o in indiv_filter):
             continue
@@ -119,10 +117,9 @@ def main():
         return set(label_to_uri[lab] for lab in selected_labels if lab in label_to_uri)
 
     classes_filter = selected_to_uri(classes_selected, classes_options) if classes_selected else None
-    props_filter = selected_to_uri(props_selected, props_options) if props_selected else None
     indiv_filter = selected_to_uri(indiv_selected, indiv_options) if indiv_selected else None
 
-    html_file = draw_graph(g, classes_filter, props_filter, indiv_filter, classes, obj_props, dt_props, individuals, labels, ru_uris)
+    html_file = draw_graph(g, classes_filter, indiv_filter, classes, obj_props, dt_props, individuals, labels, ru_uris)
 
     html_content = open(html_file, "r", encoding="utf-8").read()
     st.components.v1.html(html_content, height=750)
