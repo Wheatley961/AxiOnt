@@ -112,7 +112,6 @@ def main():
     indiv_options = create_options(individuals)
 
     classes_selected = st.multiselect("Фильтр по классам", [lab for lab, _ in classes_options])
-    props_selected = st.multiselect("Фильтр по отношениям", [lab for lab, _ in props_options])
     indiv_selected = st.multiselect("Фильтр по экземплярам", [lab for lab, _ in indiv_options])
 
     def selected_to_uri(selected_labels, options):
